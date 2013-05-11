@@ -1,39 +1,39 @@
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
 
-module Main (main, new, remove, insert, Main.lookup, lookupIndex, toList, desiredPos, mkHash) where
+module Data.HashMap.RobinHood.Base
+  ( new
+  , remove
+  , insert
+  , Data.HashMap.RobinHood.Base.lookup
+  , member
+  , lookupIndex
+  , toList
+  , size
+  , averageProbeCount
+  , load
+  ) where
+
+import           Data.Bits                   ((.&.), (.|.))
+import           Control.Monad.Primitive     (PrimMonad (..))
 
 import qualified Data.Hashable               as H
 import qualified Data.Vector.Mutable         as V
 import qualified Data.Vector.Unboxed.Mutable as U
 
-import           Data.IORef                  (IORef, newIORef, readIORef,
-                                              writeIORef)
+import Data.HashMap.RobinHood.Ref
 
-import           Control.Monad.Primitive     (PrimMonad (..))
-import           Data.STRef                  (STRef, newSTRef, readSTRef,
-                                              writeSTRef)
-import Control.Monad.ST (ST)
-
-import           Data.Bits                   ((.&.), (.|.))
-
-import GHC.Stats
-import System.Mem
-
-import Control.Monad (forM_)
-import qualified Data.HashMap.Strict as HM
 
 data RH m key value = RH { _mask            :: {-# UNPACK #-} !Mask
                          , _capacity        :: {-# UNPACK #-} !Int
                          , _resizeThreshold :: {-# UNPACK #-} !Int
-                         , _elemCount       :: RefType m Int
-                         , _hashVector      :: U.MVector (PrimState m) Int
-                         , _elemVector      :: V.MVector (PrimState m) (ELEM_kv key value)
+                         , _elemCount       :: !(RefType m Int)
+                         , _hashVector      :: !(U.MVector (PrimState m) Int)
+                         , _elemVector      :: !(V.MVector (PrimState m) (ELEM_kv key value))
                          }
 
-
-data Elem key value = Elem {-# UNPACK #-} !Hash !key !value
+-- data Elem key value = Elem {-# UNPACK #-} !Hash !key !value
 
 class Elem_kv k v where
   data ELEM_kv k v
@@ -41,9 +41,14 @@ class Elem_kv k v where
   gt :: ELEM_kv k v -> (Hash, k, v)
 
 instance Elem_kv Int () where
-  data ELEM_kv Int () = ELEM_Int {-# UNPACK #-} !Int
-  mk h k v = ELEM_Int k
-  gt (ELEM_Int k) = (mkHash k, k, ())
+  data ELEM_kv Int () = ELEM_Int {-# UNPACK #-} !Int !()
+  mk _h k v = ELEM_Int k v
+  gt (ELEM_Int k v) = (mkHash k, k, v)
+
+instance Elem_kv Int Int where
+  data ELEM_kv Int Int = ELEM_IntInt {-# UNPACK #-} !Int {-# UNPACK #-} !Int
+  mk _h k v = ELEM_IntInt k v
+  gt (ELEM_IntInt k v) = (mkHash k, k, v)
 
 newtype Mask = Mask { unMask :: Int } deriving (Eq, Show)
 newtype Hash = Hash { unHash :: Int } deriving (Eq, Show)
@@ -79,15 +84,15 @@ insert rh@(RH _ _ resizeThreshold elemCount _ _) key value = do
       rh' <- grow rh
       insertHelper rh' key value
       return rh'
-    else insertHelper rh key value >> return rh
+    else do
+      insertHelper rh key value
+      return rh
 
 {-# INLINE insertHelper #-}
 insertHelper :: (PrimMonad m, Ref m, H.Hashable key, Elem_kv key value) => RH m key value -> key -> value -> m ()
 insertHelper rh@(RH mask _ _ elemCount hV eV) key0 value0 = do
-  let !e0 = mk hash0 key0 value0
-  go hash0 e0 pos0 0
-  cnt <- readRef elemCount
-  writeRef elemCount $! cnt+1
+  go hash0 (mk hash0 key0 value0) pos0 0
+  modifyRef elemCount (+1)
   where
     hash0 = mkHash key0
     pos0 = desiredPos mask hash0
@@ -143,8 +148,7 @@ remove rh@(RH _ _ _ elemCount hV eV) key = do
     Just pos -> do
       writeHash hV pos (mkRemovedHash (mkHash key))
       writeElem eV pos (error "removed element")
-      cnt <- readRef elemCount
-      writeRef elemCount (cnt-1)
+      modifyRef elemCount (\x -> x - 1)
       return True
 
 probeDistance :: RH s key value -> Hash -> Pos -> Int
@@ -246,63 +250,3 @@ mkHash k =
          | otherwise = 0
       !h' = h .|. e
   in Hash h'
-
-class Ref m where
-  type RefType m :: * -> *
-  newRef :: a -> m (RefType m a)
-  readRef :: RefType m a -> m a
-  writeRef :: RefType m a -> a -> m ()
-
-instance Ref IO where
-  type RefType IO = IORef
-  newRef = newIORef
-  readRef = readIORef
-  writeRef = writeIORef
-
-instance Ref (ST s) where
-  type RefType (ST s)= STRef s
-  newRef = newSTRef
-  readRef = readSTRef
-  writeRef = writeSTRef
-
-main :: IO ()
-main = do
-  rh0 <- new
-  let loop2 !n !rh | n > 10000000 = return rh
-                   | otherwise = do
-                      rh' <- insert rh n ()
-                      loop2 (n+1) rh'
-  rh' <- loop2 (0::Int) rh0
-  
-  forM_ [0..10000000] $ \n -> do
-    e <- member rh' n
-    if not e
-      then print n
-      else return ()
-      
-  {-
-  let loop !th !n | n > 10000000 = th
-                  | otherwise = loop (HM.insert n () th) (n+1)
-
-      !th = loop HM.empty (0::Int)
-      !n = [ n | n <- [0..10000000], not $ HM.member n th]
-
-  print (take 10 n)
-  print (HM.size th)
-  -}
-  statsOn <- getGCStatsEnabled
-  if statsOn
-    then do
-      performGC
-      stats <- getGCStats
-      putStrLn "stats"
-      print (currentBytesUsed stats)
-    else putStrLn "stats not enabled"
-  
-  -- print (HM.size th)
-
-  size rh' >>= print
-  averageProbeCount rh' >>= print
-  load rh' >>= print
-  
-  return ()
