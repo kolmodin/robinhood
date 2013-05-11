@@ -18,9 +18,9 @@ library
 
   exposed-modules:
     Data.HashMap.RobinHood.Base
-    Data.HashMap.RobinHood.Ref
 
-  -- other-modules:       
+  other-modules:       
+    Data.HashMap.RobinHood.Ref
 
   other-extensions:
     BangPatterns
