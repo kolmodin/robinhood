@@ -194,15 +194,16 @@ size rh = readRef (_elemCount rh)
 averageProbeCount :: (PrimMonad m, Ref m) => RH m key value -> m Double
 averageProbeCount rh = go (Pos 0) 0
   where
-    go !pos !acc | unPos pos >= _capacity rh = do
-                     cnt <- readRef (_elemCount rh)
-                     return (acc / (fromIntegral cnt + 1))
-               | otherwise = do
-      h <- readHash (_hashVector rh) pos
-      let pd | h == Hash 0 = 0
-             | isRemovedHash h = 0
-             | otherwise = fromIntegral $ probeDistance rh h pos
-      go (Pos $ unPos pos + 1) (acc + pd)
+    go !pos !acc
+      | unPos pos >= _capacity rh = do
+          cnt <- readRef (_elemCount rh)
+          return (acc / (fromIntegral cnt + 1))
+      | otherwise = do
+          h <- readHash (_hashVector rh) pos
+          let pd | h == Hash 0 = 0
+                 | isRemovedHash h = 0
+                 | otherwise = fromIntegral $ probeDistance rh h pos
+          go (Pos $ unPos pos + 1) (acc + pd)
 
 load :: (Monad m, Ref m) => RH m key value -> m Double
 load rh = do
