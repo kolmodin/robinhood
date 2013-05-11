@@ -98,20 +98,18 @@ insertHelper rh@(RH mask _ _ elemCount hV eV) key0 value0 = do
     pos0 = desiredPos mask hash0
     go !hash !e !pos !dist = do
       hash' <- readHash hV pos
-      if hash' == Hash 0
-        then put pos hash e
-        else do
       let existing_elem_probe_dist = probeDistance rh hash' pos
-      if existing_elem_probe_dist < dist
-        then if isRemovedHash hash'
-               then put pos hash e
-               else do
-                 eA <- readElem eV pos
-                 let (h', _, _) = gt eA
-                 -- e'@(Elem h' _ _) <- readElem eV pos
-                 put pos hash e
-                 go h' eA (incPos mask pos) (existing_elem_probe_dist + 1)
-        else go hash e (incPos mask pos) (dist + 1)
+      case () of
+        _ | hash' == Hash 0 -> put pos hash e
+          | existing_elem_probe_dist < dist -> case () of
+              _ | isRemovedHash hash' -> put pos hash e
+                | otherwise -> do
+                     eA <- readElem eV pos
+                     let (h', _, _) = gt eA
+                     -- e'@(Elem h' _ _) <- readElem eV pos
+                     put pos hash e
+                     go h' eA (incPos mask pos) (existing_elem_probe_dist + 1)
+          | otherwise -> go hash e (incPos mask pos) (dist + 1)
     put !pos !hash !e = do
       writeHash hV pos hash
       writeElem eV pos e
@@ -124,17 +122,15 @@ iter (RH _ capacity _ _ hV eV) f a0 = go (Pos 0) a0
     go !pos !a | unPos pos >= capacity = return a
                | otherwise = do
       h <- readHash hV pos
-      if h == Hash 0
-        then go (Pos $ unPos pos + 1) a
-        else do
-      if isRemovedHash h
-        then go (Pos $ unPos pos + 1) a
-        else do
-      e <- readElem eV pos
-      --(Elem _ k v) <- readElem eV pos
-      let (_, k, v) = gt e
-      !a' <- f a k v
-      go (Pos $ unPos pos + 1) a'
+      case () of
+        _ | h == Hash 0     -> go (Pos $ unPos pos + 1) a
+          | isRemovedHash h -> go (Pos $ unPos pos + 1) a
+          | otherwise -> do
+              e <- readElem eV pos
+              --(Elem _ k v) <- readElem eV pos
+              let (_, k, v) = gt e
+              !a' <- f a k v
+              go (Pos $ unPos pos + 1) a'
 
 toList :: (PrimMonad m, Elem_kv key value) => RH m key value -> m [(key, value)]
 toList rh = iter rh (\lst k v -> return ((k,v):lst)) []
@@ -162,21 +158,17 @@ lookupIndex rh@(RH mask _ _ _ hV eV) key = go (desiredPos mask h0) 0
     h0 = mkHash key
     go !pos !dist = do
       h <- readHash hV pos
-      if h == Hash 0
-        then return Nothing
-        else do
-      if dist > probeDistance rh h pos
-        then return Nothing
-        else do
-      if isRemovedHash h
-        then go (incPos mask pos) (dist+1)
-        else do
-      e <- readElem eV pos
-      let (_, key', _) = gt e
-      --(Elem _ key' _) <- readElem eV pos
-      if h == h0 && key == key'
-        then return (Just pos)
-        else go (incPos mask pos) (dist + 1)
+      case () of
+        _ | h == Hash 0                   -> return Nothing
+          | dist > probeDistance rh h pos -> return Nothing
+          | isRemovedHash h               -> go (incPos mask pos) (dist+1)
+          | otherwise -> do
+              e <- readElem eV pos
+              let (_, key', _) = gt e
+              --(Elem _ key' _) <- readElem eV pos
+              if h == h0 && key == key'
+                then return (Just pos)
+                else go (incPos mask pos) (dist + 1)
 
 lookup :: (PrimMonad m, H.Hashable key, Eq key, Elem_kv key value)
        => RH m key value -> key -> m (Maybe value)
@@ -202,15 +194,15 @@ size rh = readRef (_elemCount rh)
 averageProbeCount :: (PrimMonad m, Ref m) => RH m key value -> m Double
 averageProbeCount rh = go (Pos 0) 0
   where
-    go !pos !s | unPos pos >= _capacity rh = do
-                   cnt <- readRef (_elemCount rh)
-                   return (s / (fromIntegral cnt + 1))
+    go !pos !acc | unPos pos >= _capacity rh = do
+                     cnt <- readRef (_elemCount rh)
+                     return (acc / (fromIntegral cnt + 1))
                | otherwise = do
       h <- readHash (_hashVector rh) pos
-      let d | h == Hash 0 = 0
-            | isRemovedHash h = 0
-            | otherwise = fromIntegral $ probeDistance rh h pos
-      go (Pos $ unPos pos + 1) (s + d)
+      let pd | h == Hash 0 = 0
+             | isRemovedHash h = 0
+             | otherwise = fromIntegral $ probeDistance rh h pos
+      go (Pos $ unPos pos + 1) (acc + pd)
 
 load :: (Monad m, Ref m) => RH m key value -> m Double
 load rh = do
