@@ -29,6 +29,7 @@ library
 
   build-depends:
     base == 4.6.*,
+    mtl,
     primitive == 0.5.*,
     hashable == 1.2.*,
     vector == 0.10.*

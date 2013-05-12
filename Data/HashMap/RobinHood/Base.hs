@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Data.HashMap.RobinHood.Base
   ( RH
@@ -29,7 +30,7 @@ import Data.HashMap.RobinHood.Ref
 data RH m key value = RH { _mask            :: {-# UNPACK #-} !Mask
                          , _capacity        :: {-# UNPACK #-} !Int
                          , _resizeThreshold :: {-# UNPACK #-} !Int
-                         , _elemCount       :: !(RefType m Int)
+                         , _elemCount       :: !(Ref m Int)
                          , _hashVector      :: !(U.MVector (PrimState m) Int)
                          , _elemVector      :: !(V.MVector (PrimState m) (ELEM_kv key value))
                          }
@@ -58,26 +59,26 @@ newtype Pos = Pos { unPos :: Int } deriving (Eq, Show)
 lOAD_FACTOR_PERCENT :: Int
 lOAD_FACTOR_PERCENT = 90
 
-new :: (PrimMonad m, Ref m) => m (RH m key value)
+new :: (PrimMonad m, WriteRef m) => m (RH m key value)
 new = alloc 16
 
-alloc :: (PrimMonad m, Ref m) => Int -> m (RH m key value)
+alloc :: (PrimMonad m, WriteRef m) => Int -> m (RH m key value)
 alloc !capacity = do
   h <- U.replicate capacity 0
   e <- V.new capacity
-  count <- newRef 0
+  count <- newRef (0::Int)
   let mask = Mask (capacity - 1)
       resizeThreshold = capacity * lOAD_FACTOR_PERCENT `div` 100
   return (RH mask capacity resizeThreshold count h e)
 
-grow :: (PrimMonad m, Ref m, H.Hashable key, Elem_kv key value)
+grow :: (PrimMonad m, WriteRef m, H.Hashable key, Elem_kv key value)
      => (RH m key value) -> m (RH m key value)
 grow rh0 = do
   rhNew <- alloc (_capacity rh0 * 2)
   iter rh0 (\rh k v -> insert rh k v) rhNew
 
 {-# INLINE insert #-}
-insert :: (PrimMonad m, Ref m, H.Hashable key, Elem_kv key value) => RH m key value -> key -> value -> m (RH m key value)
+insert :: (PrimMonad m, WriteRef m, H.Hashable key, Elem_kv key value) => RH m key value -> key -> value -> m (RH m key value)
 insert rh@(RH _ _ resizeThreshold elemCount _ _) key value = do
   cnt <- readRef elemCount
   if (cnt + 1 >= resizeThreshold)
@@ -90,10 +91,10 @@ insert rh@(RH _ _ resizeThreshold elemCount _ _) key value = do
       return rh
 
 {-# INLINE insertHelper #-}
-insertHelper :: (PrimMonad m, Ref m, H.Hashable key, Elem_kv key value) => RH m key value -> key -> value -> m ()
+insertHelper :: (PrimMonad m, WriteRef m, H.Hashable key, Elem_kv key value) => RH m key value -> key -> value -> m ()
 insertHelper rh@(RH mask _ _ elemCount hV eV) key0 value0 = do
   go hash0 (mk hash0 key0 value0) pos0 0
-  modifyRef elemCount (+1)
+  modifyRef elemCount (+(1::Int))
   where
     hash0 = mkHash key0
     pos0 = desiredPos mask hash0
@@ -136,7 +137,7 @@ iter (RH _ capacity _ _ hV eV) f a0 = go (Pos 0) a0
 toList :: (PrimMonad m, Elem_kv key value) => RH m key value -> m [(key, value)]
 toList rh = iter rh (\lst k v -> return ((k,v):lst)) []
 
-remove :: (PrimMonad m, Ref m, H.Hashable key, Eq key, Elem_kv key value)
+remove :: (PrimMonad m, WriteRef m, H.Hashable key, Eq key, Elem_kv key value)
        => RH m key value -> key -> m Bool
 remove rh@(RH _ _ _ elemCount hV eV) key = do
   mpos <- lookupIndex rh key
@@ -145,7 +146,7 @@ remove rh@(RH _ _ _ elemCount hV eV) key = do
     Just pos -> do
       writeHash hV pos (mkRemovedHash (mkHash key))
       writeElem eV pos (error "removed element")
-      modifyRef elemCount (\x -> x - 1)
+      modifyRef elemCount (\x -> x - (1::Int))
       return True
 
 probeDistance :: RH s key value -> Hash -> Pos -> Int
@@ -189,15 +190,15 @@ member rh key = do
   mpos <- lookupIndex rh key
   return $! maybe False (const True) mpos
 
-size :: (Ref m) => RH m key value -> m Int
+size :: (ReadRef m) => RH m key value -> m Int
 size rh = readRef (_elemCount rh)
 
-averageProbeCount :: (PrimMonad m, Ref m) => RH m key value -> m Double
+averageProbeCount :: (PrimMonad m, ReadRef m) => RH m key value -> m Double
 averageProbeCount rh = go (Pos 0) 0
   where
     go !pos !acc
       | unPos pos >= _capacity rh = do
-          cnt <- readRef (_elemCount rh)
+          (cnt :: Int) <- readRef (_elemCount rh)
           return (acc / (fromIntegral cnt + 1))
       | otherwise = do
           h <- readHash (_hashVector rh) pos
@@ -206,9 +207,9 @@ averageProbeCount rh = go (Pos 0) 0
                  | otherwise = fromIntegral $ probeDistance rh h pos
           go (Pos $ unPos pos + 1) (acc + pd)
 
-load :: (Monad m, Ref m) => RH m key value -> m Double
+load :: (Monad m, ReadRef m) => RH m key value -> m Double
 load rh = do
-  cnt <- readRef (_elemCount rh)
+  (cnt :: Int) <- readRef (_elemCount rh)
   return (fromIntegral cnt / fromIntegral (_capacity rh))
 
 readHash :: (PrimMonad m) => U.MVector (PrimState m) Int -> Pos -> m Hash
