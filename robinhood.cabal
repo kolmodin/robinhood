@@ -18,6 +18,7 @@ library
 
   exposed-modules:
     Data.HashMap.RobinHood.Base
+    Data.HashMap.RobinHood.ST
 
   other-modules:
     Data.HashMap.RobinHood.Ref

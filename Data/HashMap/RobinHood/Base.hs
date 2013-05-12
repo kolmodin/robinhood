@@ -5,7 +5,8 @@
 {-# LANGUAGE RankNTypes #-}
 
 module Data.HashMap.RobinHood.Base
-  ( RH
+  ( RH(..)
+  , Elem_kv
   , new
   , remove
   , insert
