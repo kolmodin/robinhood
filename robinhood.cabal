@@ -17,6 +17,7 @@ library
     Haskell2010
 
   exposed-modules:
+    Data.HashMap.RobinHood
     Data.HashMap.RobinHood.Base
     Data.HashMap.RobinHood.ST
 

@@ -5,14 +5,14 @@ module Data.HashMap.RobinHood.ST where
 import           Control.Monad.Identity
 import           Control.Monad.ST            (ST, runST)
 
-import qualified Data.Vector.Unboxed as UMV
-import qualified Data.Vector as BMV
+import qualified Data.Vector                 as BMV
+import qualified Data.Vector.Unboxed         as UMV
 
-import qualified Data.Hashable as H
+import qualified Data.Hashable               as H
 
+import           Data.HashMap.RobinHood.Base (RH (..))
 import qualified Data.HashMap.RobinHood.Base as Base
-import Data.HashMap.RobinHood.Base (RH(..))
-import Data.HashMap.RobinHood.Ref
+import           Data.HashMap.RobinHood.Ref
 
 type PureRH key value = RH Identity key value
 
@@ -31,13 +31,3 @@ makeRobinHoodST m = runST $ do
                 , _hashVector = hV
                 , _elemVector = eV
                 })
-
-makeRobinHoodFromList :: (H.Hashable key, Base.Elem_kv key value)
-                      => [(key,value)] -> PureRH key value
-makeRobinHoodFromList lst = makeRobinHoodST $ do
-    rh0 <- Base.new
-    foldM (\rh' (k,v) -> Base.insert rh' k v) rh0 lst
-
-lookup :: (Base.Elem_kv key value, H.Hashable key, Eq key)
-       => PureRH key value -> key -> Maybe value
-lookup rh k = runIdentity $ Base.lookup rh k
