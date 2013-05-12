@@ -63,9 +63,9 @@ new = alloc 16
 
 alloc :: (WriterM m) => Int -> m (RH m key value)
 alloc !capacity = do
-  h <- newUnboxedArray capacity (0::Int)
+  h <- newUnboxedArray capacity 0
   e <- newBoxedArray capacity
-  count <- newRef (0::Int)
+  count <- newRef 0
   let mask = Mask (capacity - 1)
       resizeThreshold = capacity * lOAD_FACTOR_PERCENT `div` 100
   return (RH mask capacity resizeThreshold count h e)
@@ -93,7 +93,7 @@ insert rh@(RH _ _ resizeThreshold elemCount _ _) key value = do
 insertHelper :: (WriterM m, H.Hashable key, Elem_kv key value) => RH m key value -> key -> value -> m ()
 insertHelper rh@(RH mask _ _ elemCount hV eV) key0 value0 = do
   go hash0 (mk hash0 key0 value0) pos0 0
-  modifyRef elemCount (+(1::Int))
+  modifyRef elemCount (+1)
   where
     hash0 = mkHash key0
     pos0 = desiredPos mask hash0
@@ -145,7 +145,7 @@ remove rh@(RH _ _ _ elemCount hV eV) key = do
     Just pos -> do
       writeHash hV pos (mkRemovedHash (mkHash key))
       writeElem eV pos (error "removed element")
-      modifyRef elemCount (\x -> x - (1::Int))
+      modifyRef elemCount (\x -> x - 1)
       return True
 
 probeDistance :: RH s key value -> Hash -> Pos -> Int
@@ -197,7 +197,7 @@ averageProbeCount rh = go (Pos 0) 0
   where
     go !pos !acc
       | unPos pos >= _capacity rh = do
-          (cnt :: Int) <- readRef (_elemCount rh)
+          cnt <- readRef (_elemCount rh)
           return (acc / (fromIntegral cnt + 1))
       | otherwise = do
           h <- readHash (_hashVector rh) pos
@@ -208,7 +208,7 @@ averageProbeCount rh = go (Pos 0) 0
 
 load :: (ReaderM m) => RH m key value -> m Double
 load rh = do
-  (cnt :: Int) <- readRef (_elemCount rh)
+  cnt <- readRef (_elemCount rh)
   return (fromIntegral cnt / fromIntegral (_capacity rh))
 
 readHash :: (ReaderM m) => UnboxedArray m Int -> Pos -> m Hash
