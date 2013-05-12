@@ -3,7 +3,8 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module Data.HashMap.RobinHood.Base
-  ( new
+  ( RH
+  , new
   , remove
   , insert
   , Data.HashMap.RobinHood.Base.lookup
