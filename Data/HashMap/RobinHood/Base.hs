@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Data.HashMap.RobinHood.Base
   ( RH
@@ -18,12 +19,10 @@ module Data.HashMap.RobinHood.Base
   ) where
 
 import           Data.Bits                   ((.&.), (.|.))
-import           Control.Monad.Primitive     (PrimMonad (..))
 
 import qualified Data.Hashable               as H
-import qualified Data.Vector.Mutable         as V
-import qualified Data.Vector.Unboxed.Mutable as U
 
+import Data.HashMap.RobinHood.Monad
 import Data.HashMap.RobinHood.Ref
 
 
@@ -31,8 +30,8 @@ data RH m key value = RH { _mask            :: {-# UNPACK #-} !Mask
                          , _capacity        :: {-# UNPACK #-} !Int
                          , _resizeThreshold :: {-# UNPACK #-} !Int
                          , _elemCount       :: !(Ref m Int)
-                         , _hashVector      :: !(U.MVector (PrimState m) Int)
-                         , _elemVector      :: !(V.MVector (PrimState m) (ELEM_kv key value))
+                         , _hashVector      :: !(UnboxedArray m Int)
+                         , _elemVector      :: !(BoxedArray m (ELEM_kv key value))
                          }
 
 -- data Elem key value = Elem {-# UNPACK #-} !Hash !key !value
@@ -59,26 +58,26 @@ newtype Pos = Pos { unPos :: Int } deriving (Eq, Show)
 lOAD_FACTOR_PERCENT :: Int
 lOAD_FACTOR_PERCENT = 90
 
-new :: (PrimMonad m, WriteRef m) => m (RH m key value)
+new :: (WriterM m, Elem_kv key value) => m (RH m key value)
 new = alloc 16
 
-alloc :: (PrimMonad m, WriteRef m) => Int -> m (RH m key value)
+alloc :: (WriterM m) => Int -> m (RH m key value)
 alloc !capacity = do
-  h <- U.replicate capacity 0
-  e <- V.new capacity
+  h <- newUnboxedArray capacity (0::Int)
+  e <- newBoxedArray capacity
   count <- newRef (0::Int)
   let mask = Mask (capacity - 1)
       resizeThreshold = capacity * lOAD_FACTOR_PERCENT `div` 100
   return (RH mask capacity resizeThreshold count h e)
 
-grow :: (PrimMonad m, WriteRef m, H.Hashable key, Elem_kv key value)
+grow :: (WriterM m, H.Hashable key, Elem_kv key value)
      => (RH m key value) -> m (RH m key value)
 grow rh0 = do
   rhNew <- alloc (_capacity rh0 * 2)
   iter rh0 (\rh k v -> insert rh k v) rhNew
 
 {-# INLINE insert #-}
-insert :: (PrimMonad m, WriteRef m, H.Hashable key, Elem_kv key value) => RH m key value -> key -> value -> m (RH m key value)
+insert :: (WriterM m, H.Hashable key, Elem_kv key value) => RH m key value -> key -> value -> m (RH m key value)
 insert rh@(RH _ _ resizeThreshold elemCount _ _) key value = do
   cnt <- readRef elemCount
   if (cnt + 1 >= resizeThreshold)
@@ -91,7 +90,7 @@ insert rh@(RH _ _ resizeThreshold elemCount _ _) key value = do
       return rh
 
 {-# INLINE insertHelper #-}
-insertHelper :: (PrimMonad m, WriteRef m, H.Hashable key, Elem_kv key value) => RH m key value -> key -> value -> m ()
+insertHelper :: (WriterM m, H.Hashable key, Elem_kv key value) => RH m key value -> key -> value -> m ()
 insertHelper rh@(RH mask _ _ elemCount hV eV) key0 value0 = do
   go hash0 (mk hash0 key0 value0) pos0 0
   modifyRef elemCount (+(1::Int))
@@ -118,7 +117,7 @@ insertHelper rh@(RH mask _ _ elemCount hV eV) key0 value0 = do
       return ()
 
 {-# INLINE iter #-}
-iter :: (PrimMonad m, Elem_kv key value) => RH m key value -> (a -> key -> value -> m a) -> a -> m a
+iter :: (ReaderM m, Elem_kv key value) => RH m key value -> (a -> key -> value -> m a) -> a -> m a
 iter (RH _ capacity _ _ hV eV) f a0 = go (Pos 0) a0
   where
     go !pos !a | unPos pos >= capacity = return a
@@ -134,10 +133,10 @@ iter (RH _ capacity _ _ hV eV) f a0 = go (Pos 0) a0
               !a' <- f a k v
               go (Pos $ unPos pos + 1) a'
 
-toList :: (PrimMonad m, Elem_kv key value) => RH m key value -> m [(key, value)]
+toList :: (ReaderM m, Elem_kv key value) => RH m key value -> m [(key, value)]
 toList rh = iter rh (\lst k v -> return ((k,v):lst)) []
 
-remove :: (PrimMonad m, WriteRef m, H.Hashable key, Eq key, Elem_kv key value)
+remove :: (WriterM m, H.Hashable key, Eq key, Elem_kv key value)
        => RH m key value -> key -> m Bool
 remove rh@(RH _ _ _ elemCount hV eV) key = do
   mpos <- lookupIndex rh key
@@ -153,7 +152,7 @@ probeDistance :: RH s key value -> Hash -> Pos -> Int
 probeDistance (RH mask capacity _ _ _ _) hash slot_index =
   (unPos slot_index + capacity - unPos (desiredPos mask hash)) .&. (unMask mask)
 
-lookupIndex :: (H.Hashable key, Eq key, PrimMonad m, Elem_kv key value)
+lookupIndex :: (ReaderM m, H.Hashable key, Eq key, Elem_kv key value)
             => RH m key value -> key -> m (Maybe Pos)
 lookupIndex rh@(RH mask _ _ _ hV eV) key = go (desiredPos mask h0) 0
   where
@@ -172,7 +171,7 @@ lookupIndex rh@(RH mask _ _ _ hV eV) key = go (desiredPos mask h0) 0
                 then return (Just pos)
                 else go (incPos mask pos) (dist + 1)
 
-lookup :: (PrimMonad m, H.Hashable key, Eq key, Elem_kv key value)
+lookup :: (ReaderM m, H.Hashable key, Eq key, Elem_kv key value)
        => RH m key value -> key -> m (Maybe value)
 lookup rh key = do
   mpos <- lookupIndex rh key
@@ -184,16 +183,16 @@ lookup rh key = do
       -- (Elem _ _ value) <- readElem (_elemVector rh) pos
       return $! Just value
 
-member :: (PrimMonad m, H.Hashable key, Eq key, Elem_kv key value)
+member :: (ReaderM m, H.Hashable key, Eq key, Elem_kv key value)
        => RH m key value -> key -> m Bool
 member rh key = do
   mpos <- lookupIndex rh key
   return $! maybe False (const True) mpos
 
-size :: (ReadRef m) => RH m key value -> m Int
+size :: (ReaderM m) => RH m key value -> m Int
 size rh = readRef (_elemCount rh)
 
-averageProbeCount :: (PrimMonad m, ReadRef m) => RH m key value -> m Double
+averageProbeCount :: (ReaderM m) => RH m key value -> m Double
 averageProbeCount rh = go (Pos 0) 0
   where
     go !pos !acc
@@ -207,24 +206,24 @@ averageProbeCount rh = go (Pos 0) 0
                  | otherwise = fromIntegral $ probeDistance rh h pos
           go (Pos $ unPos pos + 1) (acc + pd)
 
-load :: (Monad m, ReadRef m) => RH m key value -> m Double
+load :: (ReaderM m) => RH m key value -> m Double
 load rh = do
   (cnt :: Int) <- readRef (_elemCount rh)
   return (fromIntegral cnt / fromIntegral (_capacity rh))
 
-readHash :: (PrimMonad m) => U.MVector (PrimState m) Int -> Pos -> m Hash
+readHash :: (ReaderM m) => UnboxedArray m Int -> Pos -> m Hash
 readHash hV pos = do
-  h <- U.unsafeRead hV (unPos pos)
+  h <- readUnboxedArrayIndex hV (unPos pos)
   return $! Hash h
 
-readElem :: (PrimMonad m) => V.MVector (PrimState m) (ELEM_kv key value) -> Pos -> m (ELEM_kv key value)
-readElem eV pos = V.unsafeRead eV (unPos pos)
+readElem :: (ReaderM m) => BoxedArray m (ELEM_kv key value) -> Pos -> m (ELEM_kv key value)
+readElem eV pos = readBoxedArrayIndex eV (unPos pos)
 
-writeHash :: (PrimMonad m) => U.MVector (PrimState m) Int -> Pos -> Hash -> m ()
-writeHash v pos hash = U.unsafeWrite v (unPos pos) (unHash hash)
+writeHash :: (WriterM m) => UnboxedArray m Int -> Pos -> Hash -> m ()
+writeHash v pos hash = writeUnboxedArrayIndex v (unPos pos) (unHash hash)
 
-writeElem :: (PrimMonad m) => V.MVector (PrimState m) (ELEM_kv key value) -> Pos -> ELEM_kv key value -> m ()
-writeElem v pos e = V.unsafeWrite v (unPos pos) e
+writeElem :: (WriterM m) => BoxedArray m (ELEM_kv key value) -> Pos -> ELEM_kv key value -> m ()
+writeElem v pos e = writeBoxedArrayIndex v (unPos pos) e
 
 desiredPos :: Mask -> Hash -> Pos
 desiredPos (Mask mask) (Hash hash) = Pos (mask .&. hash)
