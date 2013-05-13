@@ -1,12 +1,11 @@
 {-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE UndecidableInstances #-}
 
 module Data.HashMap.RobinHood.Monad where
 
 import           Control.Monad.Identity
 import           Control.Monad.ST            (ST)
 
-import           Control.Monad.Primitive     (PrimMonad (..))
+import           Control.Monad.Primitive     (PrimMonad (..), RealWorld)
 import qualified Data.Vector                 as BV
 import qualified Data.Vector.Mutable         as BMV
 import qualified Data.Vector.Unboxed         as UV
@@ -27,14 +26,14 @@ instance ReaderM Identity where
   readBoxedArrayIndex v ix = Identity (BV.unsafeIndex v ix)
 
 instance ReaderM IO where
-  type UnboxedArray IO = UMV.MVector (PrimState IO)
-  type BoxedArray IO = BMV.MVector (PrimState IO)
+  type UnboxedArray IO = UMV.MVector RealWorld
+  type BoxedArray IO = BMV.MVector RealWorld
   readUnboxedArrayIndex v ix = UMV.unsafeRead v ix
   readBoxedArrayIndex v ix = BMV.unsafeRead v ix
 
 instance ReaderM (ST s) where
-  type UnboxedArray (ST s) = UMV.MVector (PrimState (ST s))
-  type BoxedArray (ST s) = BMV.MVector (PrimState (ST s))
+  type UnboxedArray (ST s) = UMV.MVector s
+  type BoxedArray (ST s) = BMV.MVector s
   readUnboxedArrayIndex v ix = UMV.unsafeRead v ix
   readBoxedArrayIndex v ix = BMV.unsafeRead v ix
 
