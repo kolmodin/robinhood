@@ -12,7 +12,7 @@ import qualified Data.HashMap.RobinHood.Base as Base
 makeRobinHoodFromList :: (H.Hashable key, Base.Elem_kv key value)
                       => [(key,value)] -> PureRH key value
 makeRobinHoodFromList lst = makeRobinHoodST $ do
-    rh0 <- Base.new
+    rh0 <- Base.newWithCapacity (length lst)
     foldM (\rh' (k,v) -> Base.insert rh' k v) rh0 lst
 
 lookup :: (Base.Elem_kv key value, H.Hashable key, Eq key)

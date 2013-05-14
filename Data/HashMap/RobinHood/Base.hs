@@ -6,6 +6,7 @@ module Data.HashMap.RobinHood.Base
   ( RH(..)
   , Elem_kv
   , new
+  , newWithCapacity
   , remove
   , insert
   , Data.HashMap.RobinHood.Base.lookup
@@ -59,6 +60,12 @@ lOAD_FACTOR_PERCENT = 90
 
 new :: (WriterM m, Elem_kv key value) => m (RH m key value)
 new = alloc 16
+
+newWithCapacity :: (WriterM m, Elem_kv key value) => Int -> m (RH m key value)
+newWithCapacity cap0 = alloc cap
+  where
+    cap = head [ n | n <- iterate (*2) 16
+                   , n * lOAD_FACTOR_PERCENT > cap0 * 100 ]
 
 alloc :: (WriterM m) => Int -> m (RH m key value)
 alloc !capacity = do

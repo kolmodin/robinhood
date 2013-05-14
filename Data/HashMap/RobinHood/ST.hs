@@ -8,8 +8,6 @@ import           Control.Monad.ST            (ST, runST)
 import qualified Data.Vector                 as BMV
 import qualified Data.Vector.Unboxed         as UMV
 
-import qualified Data.Hashable               as H
-
 import           Data.HashMap.RobinHood.Base (RH (..))
 import qualified Data.HashMap.RobinHood.Base as Base
 import           Data.HashMap.RobinHood.Ref
