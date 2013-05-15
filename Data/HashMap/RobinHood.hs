@@ -9,17 +9,17 @@ import qualified Data.Hashable as H
 import Data.HashMap.RobinHood.ST
 import qualified Data.HashMap.RobinHood.Base as Base
 
-makeRobinHoodFromList :: (H.Hashable key, Base.Elem_kv key value)
+makeRobinHoodFromList :: (H.Hashable key)
                       => [(key,value)] -> PureRH key value
 makeRobinHoodFromList lst = makeRobinHoodST $ do
     rh0 <- Base.newWithCapacity (length lst)
     foldM (\rh' (k,v) -> Base.insert rh' k v) rh0 lst
 
-lookup :: (Base.Elem_kv key value, H.Hashable key, Eq key)
+lookup :: ( H.Hashable key, Eq key)
        => PureRH key value -> key -> Maybe value
 lookup rh k = runIdentity $ Base.lookup rh k
 
-member :: (Base.Elem_kv key value, H.Hashable key, Eq key)
+member :: (H.Hashable key, Eq key)
        => PureRH key value -> key -> Bool
 member rh k = runIdentity $ Base.member rh k
 
