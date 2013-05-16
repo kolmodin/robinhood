@@ -35,21 +35,6 @@ data RH m key value = RH { _mask            :: {-# UNPACK #-} !Mask
 
 data Elem key value = Elem {-# UNPACK #-} !Hash !key !value
 
---class Elem_kv k v where
---  data ELEM_kv k v
---  mk :: Hash -> k -> v -> ELEM_kv k v
---  gt :: ELEM_kv k v -> (Hash, k, v)
-
---instance Elem_kv Int () where
---  data ELEM_kv Int () = ELEM_Int {-# UNPACK #-} !Int !()
---  mk _h k v = ELEM_Int k v
---  gt (ELEM_Int k v) = (mkHash k, k, v)
-
---instance Elem_kv Int Int where
---  data ELEM_kv Int Int = ELEM_IntInt {-# UNPACK #-} !Int {-# UNPACK #-} !Int
---  mk _h k v = ELEM_IntInt k v
---  gt (ELEM_IntInt k v) = (mkHash k, k, v)
-
 newtype Mask = Mask { unMask :: Int } deriving (Eq, Show)
 newtype Hash = Hash { unHash :: Int } deriving (Eq, Show)
 newtype Pos = Pos { unPos :: Int } deriving (Eq, Show)
@@ -110,8 +95,6 @@ insertHelper rh@(RH mask _ _ elemCount hV eV) key0 value0 = do
           | existing_elem_probe_dist < dist -> case () of
               _ | isRemovedHash hash' -> put pos hash e
                 | otherwise -> do
-                     -- eA <- readElem eV pos
-                     -- let (h', _, _) = gt eA
                      e'@(Elem h' _ _) <- readElem eV pos
                      put pos hash e
                      go h' e' (incPos mask pos) (existing_elem_probe_dist + 1)
@@ -132,9 +115,7 @@ iter (RH _ capacity _ _ hV eV) f a0 = go (Pos 0) a0
         _ | h == Hash 0     -> go (Pos $ unPos pos + 1) a
           | isRemovedHash h -> go (Pos $ unPos pos + 1) a
           | otherwise -> do
-              --e <- readElem eV pos
               (Elem _ k v) <- readElem eV pos
-              --let (_, k, v) = gt e
               !a' <- f a k v
               go (Pos $ unPos pos + 1) a'
 
@@ -169,8 +150,6 @@ lookupIndex rh@(RH mask _ _ _ hV eV) key = go (desiredPos mask h0) 0
           | dist > probeDistance rh h pos -> return Nothing
           | isRemovedHash h               -> go (incPos mask pos) (dist+1)
           | otherwise -> do
-              --e <- readElem eV pos
-              --let (_, key', _) = gt e
               (Elem _ key' _) <- readElem eV pos
               if h == h0 && key == key'
                 then return (Just pos)
@@ -183,8 +162,6 @@ lookup rh key = do
   case mpos of
     Nothing -> return Nothing
     Just pos -> do
-      --e <-  readElem (_elemVector rh) pos
-      --let (_,_,value) = gt e
       (Elem _ _ value) <- readElem (_elemVector rh) pos
       return $! Just value
 
