@@ -1,21 +1,21 @@
 
 module Data.HashMap.RobinHood where
 
--- import Control.Monad (foldM)
-import Control.Monad.Identity
+import           Control.Monad.Identity
 
-import qualified Data.Hashable as H
+import qualified Data.Hashable               as H
 
-import Data.HashMap.RobinHood.ST
 import qualified Data.HashMap.RobinHood.Base as Base
+import           Data.HashMap.RobinHood.ST
 
 makeRobinHoodFromList :: (H.Hashable key)
                       => [(key,value)] -> PureRH key value
 makeRobinHoodFromList lst = makeRobinHoodST $ do
-    rh0 <- Base.newWithCapacity (length lst)
-    foldM (\rh' (k,v) -> Base.insert rh' k v) rh0 lst
+    rh <- Base.newWithCapacity (length lst)
+    mapM_ (\(k,v) -> Base.insert rh k v) lst
+    return rh
 
-lookup :: ( H.Hashable key, Eq key)
+lookup :: (H.Hashable key, Eq key)
        => PureRH key value -> key -> Maybe value
 lookup rh k = runIdentity $ Base.lookup rh k
 

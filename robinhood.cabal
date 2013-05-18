@@ -23,6 +23,7 @@ library
     Data.HashMap.RobinHood.ST
 
   other-modules:
+    Data.HashMap.RobinHood.Internal
     Data.HashMap.RobinHood.Ref
     Data.HashMap.RobinHood.Monad
 

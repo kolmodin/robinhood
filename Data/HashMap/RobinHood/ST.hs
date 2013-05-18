@@ -8,24 +8,26 @@ import           Control.Monad.ST            (ST, runST)
 import qualified Data.Vector                 as BMV
 import qualified Data.Vector.Unboxed         as UMV
 
-import           Data.HashMap.RobinHood.Base (RH (..))
 import qualified Data.HashMap.RobinHood.Base as Base
+import qualified Data.HashMap.RobinHood.Internal as Internal
 import           Data.HashMap.RobinHood.Ref
 
-type PureRH key value = RH Identity key value
+type PureRH key value = Base.RH Identity key value
 
 makeRobinHoodST :: (forall s. ST s (Base.RH (ST s) key value)) -> PureRH key value
 makeRobinHoodST m = runST $ do
-  rh <- m
-  elemCount <- readRef (_elemCount rh)
+  rhRef <- m
+  rh <- readRef (Base.unRH rhRef)
+  elemCount <- readRef (Internal._elemCount rh)
   let elemCountRef = runIdentity $ newRef elemCount
-  hV <- UMV.unsafeFreeze (_hashVector rh)
-  eV <- BMV.unsafeFreeze (_elemVector rh)
+  hV <- UMV.unsafeFreeze (Internal._hashVector rh)
+  eV <- BMV.unsafeFreeze (Internal._elemVector rh)
 
-  return $! (RH { _mask = _mask rh
-                , _capacity = _capacity rh
-                , _resizeThreshold = _resizeThreshold rh
-                , _elemCount =  elemCountRef
-                , _hashVector = hV
-                , _elemVector = eV
-                })
+  return $! Base.RH . runIdentity . newRef $!
+      Internal.RH { Internal._mask = Internal._mask rh
+                  , Internal._capacity = Internal._capacity rh
+                  , Internal._resizeThreshold = Internal._resizeThreshold rh
+                  , Internal._elemCount =  elemCountRef
+                  , Internal._hashVector = hV
+                  , Internal._elemVector = eV
+                  }
