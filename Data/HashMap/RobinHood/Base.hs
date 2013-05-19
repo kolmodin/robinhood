@@ -17,7 +17,7 @@ import qualified Data.HashMap.RobinHood.Internal as Internal
 import           Data.HashMap.RobinHood.Monad
 import           Data.HashMap.RobinHood.Ref
 
-data RH m key value = RH { unRH :: Ref m (Internal.RH m key value) }
+newtype RH m key value = RH { unRH :: Ref m (Internal.RH m key value) }
 
 new :: (WriterM m) => m (RH m key value)
 new = do
