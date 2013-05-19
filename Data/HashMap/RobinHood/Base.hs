@@ -34,8 +34,10 @@ newWithCapacity cap = do
 insert :: (WriterM m, H.Hashable key) => RH m key value -> key -> value -> m ()
 insert (RH ref) key value = do
    rh <- readRef ref
-   rh' <- Internal.insert rh key value
-   writeRef ref rh'
+   rhM <- Internal.insert rh key value
+   case rhM of
+     Just rh' -> writeRef ref rh'
+     Nothing -> return ()
 
 lookup :: (ReaderM m, H.Hashable key, Eq key)
        => RH m key value -> key -> m (Maybe value)

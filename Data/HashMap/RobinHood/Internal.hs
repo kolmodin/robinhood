@@ -11,7 +11,7 @@ module Data.HashMap.RobinHood.Internal
   , Data.HashMap.RobinHood.Internal.lookup
   , member
   , lookupIndex
-  , toList
+  -- , toList
   , size
   , averageProbeCount
   , load
@@ -64,20 +64,21 @@ grow :: (WriterM m, H.Hashable key)
      => (RH m key value) -> m (RH m key value)
 grow rh0 = do
   rhNew <- alloc (_capacity rh0 * 2)
-  iter rh0 (\rh k v -> insert rh k v) rhNew
+  iter rh0 (\k v -> insertHelper rhNew k v)
+  return rhNew
 
 {-# INLINE insert #-}
-insert :: (WriterM m, H.Hashable key) => RH m key value -> key -> value -> m (RH m key value)
+insert :: (WriterM m, H.Hashable key) => RH m key value -> key -> value -> m (Maybe (RH m key value))
 insert rh@(RH _ _ resizeThreshold elemCount _ _) key value = do
   cnt <- readRef elemCount
   if (cnt + 1 >= resizeThreshold)
     then do
       rh' <- grow rh
       insertHelper rh' key value
-      return rh'
+      return $! (Just rh')
     else do
       insertHelper rh key value
-      return rh
+      return $! Nothing
 
 {-# INLINE insertHelper #-}
 insertHelper :: (WriterM m, H.Hashable key) => RH m key value -> key -> value -> m ()
@@ -105,22 +106,22 @@ insertHelper rh@(RH mask _ _ elemCount hV eV) key0 value0 = do
       return ()
 
 {-# INLINE iter #-}
-iter :: (ReaderM m) => RH m key value -> (a -> key -> value -> m a) -> a -> m a
-iter (RH _ capacity _ _ hV eV) f a0 = go (Pos 0) a0
+iter :: (ReaderM m) => RH m key value -> (key -> value -> m ()) -> m ()
+iter (RH _ capacity _ _ hV eV) f = go (Pos 0)
   where
-    go !pos !a | unPos pos >= capacity = return a
-               | otherwise = do
+    go !pos | unPos pos >= capacity = return ()
+            | otherwise = do
       h <- readHash hV pos
       case () of
-        _ | h == Hash 0     -> go (Pos $ unPos pos + 1) a
-          | isRemovedHash h -> go (Pos $ unPos pos + 1) a
+        _ | h == Hash 0     -> go (Pos $ unPos pos + 1)
+          | isRemovedHash h -> go (Pos $ unPos pos + 1)
           | otherwise -> do
               (Elem _ k v) <- readElem eV pos
-              !a' <- f a k v
-              go (Pos $ unPos pos + 1) a'
+              f k v
+              go (Pos $ unPos pos + 1)
 
-toList :: (ReaderM m) => RH m key value -> m [(key, value)]
-toList rh = iter rh (\lst k v -> return ((k,v):lst)) []
+-- toList :: (ReaderM m) => RH m key value -> m [(key, value)]
+-- toList rh = iter rh (\lst k v -> return ((k,v):lst)) []
 
 remove :: (WriterM m, H.Hashable key, Eq key)
        => RH m key value -> key -> m Bool
