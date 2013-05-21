@@ -17,6 +17,8 @@ import qualified Data.HashMap.RobinHood.Internal as Internal
 import           Data.HashMap.RobinHood.Monad
 import           Data.HashMap.RobinHood.Ref
 
+-- TODO: Adding a wrapper seems to have doubled the amount of allocation for insertion.
+
 newtype RH m key value = RH { unRH :: Ref m (Internal.RH m key value) }
 
 new :: (WriterM m) => m (RH m key value)
