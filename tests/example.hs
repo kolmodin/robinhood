@@ -27,7 +27,7 @@ main = do
   --    then print n
   --    else return ()
 
-  let rh = PureRH.makeRobinHoodFromList [(n,()) | n <- [0..1000000::Int]]
+  let rh = PureRH.fromList [(n,()) | n <- [0..1000000::Int]]
   mapM_ print $ filter (not . PureRH.member rh) [0..1000000]
 
   statsOn <- getGCStatsEnabled

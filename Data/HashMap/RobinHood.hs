@@ -8,9 +8,9 @@ import qualified Data.Hashable               as H
 import qualified Data.HashMap.RobinHood.Base as Base
 import           Data.HashMap.RobinHood.ST
 
-makeRobinHoodFromList :: (H.Hashable key)
+fromList :: (H.Hashable key)
                       => [(key,value)] -> PureRH key value
-makeRobinHoodFromList lst = makeRobinHoodST $ do
+fromList lst = makeRobinHoodST $ do
     rh <- Base.newWithCapacity (length lst)
     mapM_ (\(k,v) -> Base.insert rh k v) lst
     return rh
