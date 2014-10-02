@@ -33,7 +33,7 @@ library
     TypeFamilies
 
   build-depends:
-    base == 4.6.*,
+    base > 4.6 && < 5,
     mtl,
     primitive == 0.5.*,
     hashable == 1.2.*,
@@ -48,6 +48,6 @@ executable example
   hs-source-dirs: tests
 
   build-depends:
-    base == 4.6.*,
+    base > 4.6 && < 5,
     robinhood,
     unordered-containers
